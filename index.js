@@ -3,12 +3,21 @@ const pg = require("pg");
 const axios = require("axios");
 const express = require("express");
 const dotenv = require("dotenv").config();
+const { execSync } = require("child_process");
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
+
+try {
+  execSync("mkdir -p ~/.postgresql");
+  execSync('wget "https://storage.yandexcloud.net/cloud-certs/CA.pem" --output-document ~/.postgresql/root.crt');
+  execSync("chmod 0600 ~/.postgresql/root.crt");
+} catch (error) {
+  console.error("Error executing shell commands: ", error);
+}
 
 const config = {
-  connectionString:
-    "postgres://candidate:62I8anq3cFq5GYh2u4Lh@rc1b-r21uoagjy1t7k77h.mdb.yandexcloud.net:6432/db1",
+  connectionString: "postgres://candidate:62I8anq3cFq5GYh2u4Lh@rc1b-r21uoagjy1t7k77h.mdb.yandexcloud.net:6432/db1",
   ssl: {
     rejectUnauthorized: true,
     ca: fs.readFileSync("/home/runner/.postgresql/root.crt").toString(),
@@ -31,12 +40,12 @@ const createTableQuery = `
   );
 `;
 
-const insertCharacterQuery = `
+const insert = `
 INSERT INTO my_github_username (name, status, species, gender, origin, location, image, episode_count)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 `;
 
-async function fetchAndStoreCharacters() {
+async function fetch() {
   try {
     await conn.connect();
     await conn.query(createTableQuery);
@@ -44,9 +53,7 @@ async function fetchAndStoreCharacters() {
     let totalPages = 1;
 
     while (page <= totalPages) {
-      const response = await axios.get(
-        `https://rickandmortyapi.com/api/character/?page=${page}`,
-      );
+      const response = await axios.get(`https://rickandmortyapi.com/api/character/?page=${page}`);
       const characters = response.data.results;
       totalPages = response.data.info.pages;
 
@@ -61,7 +68,7 @@ async function fetchAndStoreCharacters() {
           character.image,
           character.episode.length,
         ];
-        await conn.query(insertCharacterQuery, values);
+        await conn.query(insert, values);
       }
       page++;
     }
@@ -73,11 +80,11 @@ async function fetchAndStoreCharacters() {
   }
 }
 
-fetchAndStoreCharacters();
+fetch();
 
 app.use(express.static("public"));
 
-app.get("/api/characters", async (req, res) => {
+app.get("/api", async (req, res) => {
   try {
     const result = await conn.query("SELECT * FROM my_github_username");
     res.json(result.rows);
@@ -88,5 +95,5 @@ app.get("/api/characters", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log("localhost: " + PORT);
+  console.log(`localhost: ` + PORT);
 });
