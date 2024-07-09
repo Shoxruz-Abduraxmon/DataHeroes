@@ -2,8 +2,9 @@ const fs = require("fs");
 const pg = require("pg");
 const axios = require("axios");
 const express = require("express");
+const dotenv = require("dotenv").config();
 const app = express();
-const port = 3000;
+const PORT = process.env.PORT || 3000;
 
 const config = {
   connectionString:
@@ -64,7 +65,7 @@ async function fetchAndStoreCharacters() {
       }
       page++;
     }
-    console.log("All characters have been inserted.");
+    console.log("Inserted");
   } catch (e) {
     console.error(e);
   } finally {
@@ -82,10 +83,10 @@ app.get("/api/characters", async (req, res) => {
     res.json(result.rows);
   } catch (e) {
     console.error(e);
-    res.status(500).send("Error fetching characters");
+    res.status(500).send("Error");
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+app.listen(PORT, () => {
+  console.log("localhost: " + PORT);
 });
