@@ -4,28 +4,30 @@ const axios = require("axios");
 const express = require("express");
 const dotenv = require("dotenv").config();
 const { execSync } = require("child_process");
+const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Path to save the certificate
+const certPath = path.join(__dirname, 'root.crt');
+
 try {
-  execSync("mkdir -p ~/.postgresql");
-  execSync(
-    'wget "https://storage.yandexcloud.net/cloud-certs/CA.pem" --output-document ~/.postgresql/root.crt',
-  );
-  execSync("chmod 0600 ~/.postgresql/root.crt");
+  execSync(`wget "https://storage.yandexcloud.net/cloud-certs/CA.pem" --output-document ${certPath}`);
+  execSync(`chmod 0600 ${certPath}`);
 } catch (error) {
   console.error("Error executing shell commands: ", error);
 }
 
 const config = {
-  connectionString:
-    "postgres://candidate:62I8anq3cFq5GYh2u4Lh@rc1b-r21uoagjy1t7k77h.mdb.yandexcloud.net:6432/db1",
+  connectionString: "postgres://candidate:62I8anq3cFq5GYh2u4Lh@rc1b-r21uoagjy1t7k77h.mdb.yandexcloud.net:6432/db1",
   ssl: {
     rejectUnauthorized: true,
-    ca: fs.readFileSync("/home/runner/.postgresql/root.crt").toString(),
+    ca: fs.readFileSync(certPath).toString(),
   },
 };
+
+const conn = new pg.Client(config);
 
 const createTableQuery = `
   CREATE TABLE IF NOT EXISTS my_github_username (
@@ -46,16 +48,14 @@ INSERT INTO my_github_username (name, status, species, gender, origin, location,
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 `;
 
-async function fetchAndStoreCharacters(client) {
+async function fetchAndStoreCharacters() {
   try {
-    await client.query(createTableQuery);
+    await conn.query(createTableQuery);
     let page = 1;
     let totalPages = 1;
 
     while (page <= totalPages) {
-      const response = await axios.get(
-        `https://rickandmortyapi.com/api/character/?page=${page}`,
-      );
+      const response = await axios.get(`https://rickandmortyapi.com/api/character/?page=${page}`);
       const characters = response.data.results;
       totalPages = response.data.info.pages;
 
@@ -70,7 +70,7 @@ async function fetchAndStoreCharacters(client) {
           character.image,
           character.episode.length,
         ];
-        await client.query(insertCharacterQuery, values);
+        await conn.query(insertCharacterQuery, values);
       }
       page++;
     }
@@ -81,17 +81,15 @@ async function fetchAndStoreCharacters(client) {
 }
 
 async function startServer() {
-  const client = new pg.Client(config);
-
   try {
-    await client.connect();
-    await fetchAndStoreCharacters(client);
+    await conn.connect();
+    await fetchAndStoreCharacters();
 
     app.use(express.static("public"));
 
     app.get("/api", async (req, res) => {
       try {
-        const result = await client.query("SELECT * FROM my_github_username");
+        const result = await conn.query("SELECT * FROM my_github_username");
         res.json(result.rows);
       } catch (e) {
         console.error(e);
@@ -100,10 +98,10 @@ async function startServer() {
     });
 
     app.listen(PORT, () => {
-      console.log(`localhost: ` + PORT);
+      console.log(`Server running at http://localhost:${PORT}`);
     });
   } catch (e) {
-    console.error("Error:", e);
+    console.error("Database connection error:", e);
   }
 }
 
