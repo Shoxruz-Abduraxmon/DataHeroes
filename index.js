@@ -10,21 +10,22 @@ const PORT = process.env.PORT || 3001;
 
 try {
   execSync("mkdir -p ~/.postgresql");
-  execSync('wget "https://storage.yandexcloud.net/cloud-certs/CA.pem" --output-document ~/.postgresql/root.crt');
+  execSync(
+    'wget "https://storage.yandexcloud.net/cloud-certs/CA.pem" --output-document ~/.postgresql/root.crt',
+  );
   execSync("chmod 0600 ~/.postgresql/root.crt");
 } catch (error) {
   console.error("Error executing shell commands: ", error);
 }
 
 const config = {
-  connectionString: "postgres://candidate:62I8anq3cFq5GYh2u4Lh@rc1b-r21uoagjy1t7k77h.mdb.yandexcloud.net:6432/db1",
+  connectionString:
+    "postgres://candidate:62I8anq3cFq5GYh2u4Lh@rc1b-r21uoagjy1t7k77h.mdb.yandexcloud.net:6432/db1",
   ssl: {
     rejectUnauthorized: true,
     ca: fs.readFileSync("/home/runner/.postgresql/root.crt").toString(),
   },
 };
-
-const conn = new pg.Client(config);
 
 const createTableQuery = `
   CREATE TABLE IF NOT EXISTS my_github_username (
@@ -40,20 +41,21 @@ const createTableQuery = `
   );
 `;
 
-const insert = `
+const insertCharacterQuery = `
 INSERT INTO my_github_username (name, status, species, gender, origin, location, image, episode_count)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 `;
 
-async function fetch() {
+async function fetchAndStoreCharacters(client) {
   try {
-    await conn.connect();
-    await conn.query(createTableQuery);
+    await client.query(createTableQuery);
     let page = 1;
     let totalPages = 1;
 
     while (page <= totalPages) {
-      const response = await axios.get(`https://rickandmortyapi.com/api/character/?page=${page}`);
+      const response = await axios.get(
+        `https://rickandmortyapi.com/api/character/?page=${page}`,
+      );
       const characters = response.data.results;
       totalPages = response.data.info.pages;
 
@@ -68,32 +70,41 @@ async function fetch() {
           character.image,
           character.episode.length,
         ];
-        await conn.query(insert, values);
+        await client.query(insertCharacterQuery, values);
       }
       page++;
     }
     console.log("Inserted");
   } catch (e) {
     console.error(e);
-  } finally {
-    await conn.end();
   }
 }
 
-fetch();
+async function startServer() {
+  const client = new pg.Client(config);
 
-app.use(express.static("public"));
-
-app.get("/api", async (req, res) => {
   try {
-    const result = await conn.query("SELECT * FROM my_github_username");
-    res.json(result.rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).send("Error");
-  }
-});
+    await client.connect();
+    await fetchAndStoreCharacters(client);
 
-app.listen(PORT, () => {
-  console.log(`localhost: ` + PORT);
-});
+    app.use(express.static("public"));
+
+    app.get("/api", async (req, res) => {
+      try {
+        const result = await client.query("SELECT * FROM my_github_username");
+        res.json(result.rows);
+      } catch (e) {
+        console.error(e);
+        res.status(500).send("Error");
+      }
+    });
+
+    app.listen(PORT, () => {
+      console.log(`localhost: ` + PORT);
+    });
+  } catch (e) {
+    console.error("Error:", e);
+  }
+}
+
+startServer();
