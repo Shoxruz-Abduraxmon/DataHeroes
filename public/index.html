@@ -3,12 +3,59 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>heroes</title>
-    <link rel="stylesheet" href="style.css" />
+    <title>Rick and Morty Characters</title>
+    <style>
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+    </style>
   </head>
   <body>
-    <h1>Data Heroes test</h1>
-    <div id="characters"></div>
-    <script src="script.js"></script>
+    <h1>Data Heroes</h1>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Status</th>
+          <th>Species</th>
+          <th>Gender</th>
+          <th>Origin</th>
+          <th>Location</th>
+          <th>Image</th>
+          <th>Episode Count</th>
+        </tr>
+      </thead>
+      <tbody id="character-table-body"></tbody>
+    </table>
+    <script>
+      fetch("/api/characters")
+        .then((response) => response.json())
+        .then((data) => {
+          const tableBody = document.getElementById("character-table-body");
+          data.forEach((character) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+            <td>${character.name}</td>
+            <td>${character.status}</td>
+            <td>${character.species}</td>
+            <td>${character.gender}</td>
+            <td>${character.origin}</td>
+            <td>${character.location}</td>
+            <td><img src="${character.image}" alt="${character.name}" width="50"></td>
+            <td>${character.episode_count}</td>
+          `;
+            tableBody.appendChild(row);
+          });
+        });
+    </script>
   </body>
 </html>

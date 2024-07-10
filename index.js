@@ -9,21 +9,19 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Path to save the certificate
-const certPath = path.join(__dirname, 'root.crt');
-
 try {
-  execSync(`wget "https://storage.yandexcloud.net/cloud-certs/CA.pem" --output-document ${certPath}`);
-  execSync(`chmod 0600 ${certPath}`);
+  execSync("mkdir -p ~/.postgresql");
+  execSync('wget "https://storage.yandexcloud.net/cloud-certs/CA.pem" --output-document ~/.postgresql/root.crt');
+  execSync("chmod 0600 ~/.postgresql/root.crt");
 } catch (error) {
-  console.error("Error executing shell commands: ", error);
+  console.error("Error sertificat ", error);
 }
 
 const config = {
   connectionString: "postgres://candidate:62I8anq3cFq5GYh2u4Lh@rc1b-r21uoagjy1t7k77h.mdb.yandexcloud.net:6432/db1",
   ssl: {
     rejectUnauthorized: true,
-    ca: fs.readFileSync(certPath).toString(),
+    ca: fs.readFileSync("/home/runner/.postgresql/root.crt").toString(),
   },
 };
 
@@ -43,13 +41,14 @@ const createTableQuery = `
   );
 `;
 
-const insertCharacterQuery = `
+const insert = `
 INSERT INTO my_github_username (name, status, species, gender, origin, location, image, episode_count)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 `;
 
 async function fetchAndStoreCharacters() {
   try {
+    await conn.connect();
     await conn.query(createTableQuery);
     let page = 1;
     let totalPages = 1;
@@ -70,39 +69,34 @@ async function fetchAndStoreCharacters() {
           character.image,
           character.episode.length,
         ];
-        await conn.query(insertCharacterQuery, values);
+        await conn.query(insert, values);
       }
       page++;
     }
     console.log("Inserted");
   } catch (e) {
     console.error(e);
+  } finally {
+    await conn.end();
   }
 }
 
-async function startServer() {
+fetchAndStoreCharacters();
+
+app.use(express.static("public"));
+
+app.get("/api/characters", async (req, res) => {
   try {
+    const conn = new pg.Client(config);
     await conn.connect();
-    await fetchAndStoreCharacters();
-
-    app.use(express.static("public"));
-
-    app.get("/api", async (req, res) => {
-      try {
-        const result = await conn.query("SELECT * FROM my_github_username");
-        res.json(result.rows);
-      } catch (e) {
-        console.error(e);
-        res.status(500).send("Error");
-      }
-    });
-
-    app.listen(PORT, () => {
-      console.log(`Server running at http://localhost:${PORT}`);
-    });
+    const result = await conn.query("SELECT * FROM my_github_username");
+    res.json(result.rows);
+    await conn.end();
   } catch (e) {
-    console.error("Database connection error:", e);
+    console.log("Error" + e);
   }
-}
+});
 
-startServer();
+app.listen(PORT, () => {
+  console.log(`localhost: ` + PORT);
+});
